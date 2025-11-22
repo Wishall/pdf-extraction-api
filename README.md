@@ -143,7 +143,7 @@ Zero code changes needed.
 
 📜 License
 
-MIT License (optional — you can choose later)
+MIT License
 
 🤝 Contributing
 
