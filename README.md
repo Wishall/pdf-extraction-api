@@ -4,11 +4,6 @@ A lightweight, production-ready PDF text & metadata extraction service.
 
 
 
-
-
-
-
-
 🚀 Overview
 
 PDF Extraction API is a fast, secure, and developer-friendly service for:
@@ -27,6 +22,7 @@ Enforcing upload size limits via Spring configuration
 
 This project is designed as an MVP intended for RapidAPI monetization, cloud deployment (OCI/AWS), or internal use.
 
+
 ✨ Features
 
 ✔ Extract complete text from any PDF
@@ -38,6 +34,7 @@ This project is designed as an MVP intended for RapidAPI monetization, cloud dep
 ✔ Full integration test suite using Rest Assured + JUnit
 ✔ Dockerfile included
 ✔ OpenAPI 3 generated automatically at /v3/api-docs
+
 
 📦 API Endpoints
 POST /api/extract-text
@@ -143,24 +140,6 @@ Any Kubernetes cluster
 
 Zero code changes needed.
 
-📁 Project Structure
-src/
-  main/
-    java/com/vishal/pdfapi/
-      controller/
-      service/
-      model/
-      exception/
-    resources/
-      application.yml
-  test/
-    java/com/vishal/pdfapi/
-      ExtractApiIntegrationTest.java
-      MetadataIntegrationTest.java
-    resources/
-      application-test.yml
-Dockerfile
-README.md
 
 📜 License
 
