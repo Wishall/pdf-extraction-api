@@ -1,0 +1,158 @@
+openapi: 3.0.3
+info:
+  title: PDF Text & Metadata Extraction API
+  version: 1.0.0
+  description: |
+    A lightweight MVP API to extract:
+      - Full text from PDFs
+      - Page-wise text
+      - PDF metadata (title, author, creation date, etc.)
+    The API also detects:
+      - Password-protected PDFs
+      - Corrupt PDFs
+servers:
+  - url: https://your-domain.com/api
+  - url: http://localhost:8080/api
+
+paths:
+
+  /extract-text:
+    post:
+      summary: Extract full text & per-page text from a PDF
+      description: |
+        Upload a PDF file and get:
+        - Full extracted text
+        - Page-by-page extracted text
+        Automatically rejects:
+        - Password-protected PDFs
+        - Invalid / corrupt PDFs
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF file to be processed
+      responses:
+        "200":
+          description: Extraction succeeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractResponse"
+        "400":
+          description: Invalid input or password-protected PDF
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal processing error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /metadata:
+    post:
+      summary: Extract metadata from a PDF
+      description: |
+        Extracts metadata including:
+        - Title  
+        - Author  
+        - Creator  
+        - Producer  
+        - Subject  
+        - Creation/Modification Date
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF file for metadata extraction
+      responses:
+        "200":
+          description: Metadata returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataResponse"
+        "400":
+          description: Invalid PDF or password-protected PDF
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+
+    ExtractResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        text:
+          type: string
+        pages:
+          type: array
+          items:
+            $ref: "#/components/schemas/PageText"
+
+    PageText:
+      type: object
+      properties:
+        page:
+          type: integer
+        text:
+          type: string
+
+    MetadataResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        metadata:
+          type: object
+          properties:
+            title:
+              type: string
+            author:
+              type: string
+            subject:
+              type: string
+            creator:
+              type: string
+            producer:
+              type: string
+            creationDate:
+              type: string
+            modificationDate:
+              type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
