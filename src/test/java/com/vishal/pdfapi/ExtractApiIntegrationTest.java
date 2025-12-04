@@ -104,23 +104,27 @@ public class ExtractApiIntegrationTest {
                 .when()
                 .post("/api/extract-text")
                 .then()
-                .statusCode(500);
+                .statusCode(400)
+                .body("message", containsStringIgnoringCase("corrupt or malformed"));;
     }
 
     // 7. No file field
     @Test
     void testMissingFileField() {
         given()
+                .multiPart("filew", "valid.pdf", load("valid.pdf"))
                 .contentType(ContentType.MULTIPART)
                 .when()
                 .post("/api/extract-text")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("message", containsStringIgnoringCase("Missing required file part"));;
+
     }
 
     // 7. Incorrect file field
     @Test
-    void testIncorrectFileField() {
+    void testInvalidFileField() {
         given()
                 .multiPart("file", "missing.pdf", new byte[0])
                 .contentType(ContentType.MULTIPART)

@@ -25,9 +25,10 @@ public class PdfExtractService {
   private static final Logger log = LoggerFactory.getLogger(PdfExtractService.class);
 
   private void validateFile(MultipartFile file) {
-    if (file == null || file.isEmpty()) {
+    if (file == null || file.isEmpty() || file.getSize() == 0) {
       throw new InvalidFileException("No file uploaded or file is empty.");
     }
+
     // Simplified check, assuming you will enforce the PDF MIME type in a future iteration
     if (!file.getOriginalFilename().toLowerCase().endsWith(".pdf")) {
       throw new InvalidFileException("Invalid file type. Only PDF files are allowed.");
@@ -77,6 +78,13 @@ public class PdfExtractService {
     } catch (IOException ex) {
       // Catches structural corruption errors (mapped to 500)
       log.error("PDF extraction failed for '{}': File corruption or structural error.", file.getOriginalFilename(), ex);
+      // 💡 FIX: Inspect the message to check for common corruption signatures
+      String msg = ex.getMessage().toLowerCase();
+
+      if (msg.contains("end-of-file") || msg.contains("stream") || msg.contains("invalid") || msg.contains("corrupt")) {
+        // Re-throw as a client error (400)
+        throw new InvalidFileException("The uploaded PDF document appears to be corrupt or malformed.");
+      }
       throw ex;
     }
   }
