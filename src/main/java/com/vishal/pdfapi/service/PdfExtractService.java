@@ -1,10 +1,11 @@
 package com.vishal.pdfapi.service;
 
+import com.vishal.pdfapi.exception.InvalidFileException;
+import com.vishal.pdfapi.exception.InvalidPasswordException;
 import com.vishal.pdfapi.model.ExtractResponse;
 import com.vishal.pdfapi.model.PageText;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
-import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -22,67 +24,72 @@ public class PdfExtractService {
 
   private static final Logger log = LoggerFactory.getLogger(PdfExtractService.class);
 
-  public ExtractResponse extract(MultipartFile file) throws IOException {
+  private void validateFile(MultipartFile file) {
+    if (file == null || file.isEmpty()) {
+      throw new InvalidFileException("No file uploaded or file is empty.");
+    }
+    // Simplified check, assuming you will enforce the PDF MIME type in a future iteration
+    if (!file.getOriginalFilename().toLowerCase().endsWith(".pdf")) {
+      throw new InvalidFileException("Invalid file type. Only PDF files are allowed.");
+    }
+  }
 
-    log.info("Starting PDF extraction. File='{}', size={} bytes",
-            file.getOriginalFilename(),
-            file.getSize());
+  public ExtractResponse extract(MultipartFile file) throws IOException {
+    validateFile(file); // 1. Moved validation here
+
+    log.info("Starting PDF text extraction. Filename='{}', size={} bytes",
+            file.getOriginalFilename(), file.getSize());
 
     long startTime = System.currentTimeMillis();
 
     try (PDDocument doc = PDDocument.load(file.getBytes())) {
 
       if (doc.isEncrypted()) {
-        throw new InvalidPasswordException("PDF is password-protected. Not supported.");
+        throw new InvalidPasswordException("PDF is password-protected/encrypted and not supported.");
       }
 
       int totalPages = doc.getNumberOfPages();
-      log.info("PDF loaded successfully. Total pages={}", totalPages);
-
       PDFTextStripper stripper = new PDFTextStripper();
+//      stripper.seten(StandardCharsets.UTF_8.name()); // Ensure UTF-8
 
-      // Extract full text
-      String fullText = stripper.getText(doc);
-      log.debug("Full text extracted ({} chars)", fullText.length());
+      // 1. Extract full text
+      String fullText = stripper.getText(doc).trim();
 
-      ExtractResponse response = new ExtractResponse();
-      response.success = true;
-      response.text = fullText;
-
-      // Extract per-page text
+      // 2. Extract per-page text
       List<PageText> pages = new ArrayList<>();
       for (int i = 1; i <= totalPages; i++) {
         stripper.setStartPage(i);
         stripper.setEndPage(i);
-        String pageText = stripper.getText(doc);
+        String pageText = stripper.getText(doc).trim();
 
         pages.add(new PageText(i, pageText));
-        log.debug("Extracted page {} ({} chars)", i, pageText.length());
       }
 
-      response.pages = pages;
-
       long elapsed = System.currentTimeMillis() - startTime;
-      log.info("PDF extraction completed successfully in {} ms", elapsed);
+      log.info("PDF extraction completed in {} ms. Total pages: {}", elapsed, totalPages);
 
-      return response;
+      // Return immutable record
+      return new ExtractResponse(fullText, pages, totalPages);
 
     } catch (org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException e) {
-      throw new InvalidPasswordException("PDF is password-protected. Not supported.");
+      // Catches encrypted files even if isEncrypted() failed
+      throw new InvalidPasswordException("PDF is password-protected/encrypted and not supported.");
     } catch (IOException ex) {
-      log.error("PDF extraction failed for '{}': {}", file.getOriginalFilename(), ex.getMessage(), ex);
-      throw ex; // propagate to controller
+      // Catches structural corruption errors (mapped to 500)
+      log.error("PDF extraction failed for '{}': File corruption or structural error.", file.getOriginalFilename(), ex);
+      throw ex;
     }
   }
 
   public Map<String, Object> extractMetadata(MultipartFile file) throws IOException {
+    validateFile(file); // 1. Moved validation here
 
     log.info("Starting metadata extraction for '{}'", file.getOriginalFilename());
 
     try (PDDocument doc = PDDocument.load(file.getBytes())) {
 
       if (doc.isEncrypted()) {
-        throw new InvalidPasswordException("PDF is password-protected. Metadata cannot be extracted.");
+        throw new InvalidPasswordException("PDF is password-protected/encrypted. Metadata cannot be extracted.");
       }
 
       Map<String, Object> map = new HashMap<>();
@@ -91,9 +98,9 @@ public class PdfExtractService {
       map.put("encrypted", doc.isEncrypted());
       map.put("version", doc.getVersion());
 
+      // ... (Metadata fields remain the same) ...
       if (doc.getDocumentInformation() != null) {
         PDDocumentInformation info = doc.getDocumentInformation();
-
         map.put("title", info.getTitle());
         map.put("author", info.getAuthor());
         map.put("subject", info.getSubject());
@@ -108,16 +115,10 @@ public class PdfExtractService {
       return map;
 
     } catch (org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException e) {
-      throw new InvalidPasswordException("PDF is password-protected. Metadata cannot be extracted.");
+      throw new InvalidPasswordException("PDF is password-protected/encrypted. Metadata cannot be extracted.");
     } catch (IOException ex) {
-      log.error("Metadata extraction failed for '{}': {}", file.getOriginalFilename(), ex.getMessage());
+      log.error("Metadata extraction failed for '{}': Structural error.", file.getOriginalFilename(), ex);
       throw ex;
-    }
-  }
-
-  public static class InvalidPasswordException extends RuntimeException {
-    public InvalidPasswordException(String message) {
-      super(message);
     }
   }
 }

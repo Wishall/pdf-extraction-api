@@ -1,56 +1,108 @@
 package com.vishal.pdfapi.exception;
 
-import com.vishal.pdfapi.controller.ExtractController;
-import com.vishal.pdfapi.model.ExtractResponse;
-import com.vishal.pdfapi.service.PdfExtractService;
-import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import java.time.Instant;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.io.IOException;
 
-import java.util.HashMap;
-import java.util.Map;
-
-@ControllerAdvice()
+@ControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(PdfExtractService.InvalidPasswordException.class)
-    public ResponseEntity<Map<String, Object>> handlePasswordError(PdfExtractService.InvalidPasswordException e) {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-        Map<String, Object> body = new HashMap<>();
-        body.put("success", false);
-        body.put("message", e.getMessage());
-        return ResponseEntity.status(400).body(body);
+    // Standardized API Error Response for all 4xx/5xx status codes
+    private record ApiErrorResponse(String requestId, Instant timestamp, int status, String error, String message) {}
+
+    // --- 400 Bad Request Handlers ---
+
+    /**
+     * Handles InvalidFileException (empty, wrong type, file validation errors from Service)
+     * and InvalidPasswordException. Both return 400.
+     */
+    @ExceptionHandler({InvalidFileException.class, InvalidPasswordException.class})
+    public ResponseEntity<ApiErrorResponse> handleClientValidationExceptions(RuntimeException e) {
+        HttpStatus status = HttpStatus.BAD_REQUEST;
+        log.warn("Client Error (400): {}", e.getMessage());
+        ApiErrorResponse errorResponse = new ApiErrorResponse(
+                UUID.randomUUID().toString(), Instant.now(), status.value(), status.getReasonPhrase(),
+                e.getMessage()
+        );
+        return new ResponseEntity<>(errorResponse, status);
     }
 
+    /**
+     * Handles MissingServletRequestPartException (client did not include the 'file' part). Returns 400.
+     */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiErrorResponse> handleMissingPartException(MissingServletRequestPartException ex, WebRequest request) {
+        HttpStatus status = HttpStatus.BAD_REQUEST;
+        log.warn("Client Error (400): Missing required part. {}", ex.getMessage());
+        ApiErrorResponse errorResponse = new ApiErrorResponse(
+                UUID.randomUUID().toString(), Instant.now(), status.value(), status.getReasonPhrase(),
+                "Missing required file part. Ensure the request includes a 'file' parameter."
+        );
+        return new ResponseEntity<>(errorResponse, status);
+    }
+
+    /**
+     * Handles general MultipartException (malformed headers, missing boundary). Returns 400.
+     */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ApiErrorResponse> handleMultipartException(MultipartException ex, WebRequest request) {
+        HttpStatus status = HttpStatus.BAD_REQUEST;
+        log.warn("Client Error (400): Malformed multipart request. {}", ex.getMessage());
+
+        String clientMessage = "The request body is structurally invalid (e.g., missing boundary or malformed data). Please ensure Content-Type is correct.";
+
+        ApiErrorResponse errorResponse = new ApiErrorResponse(
+                UUID.randomUUID().toString(), Instant.now(), status.value(), status.getReasonPhrase(),
+                clientMessage
+        );
+        return new ResponseEntity<>(errorResponse, status);
+    }
+
+    // --- 413 Payload Too Large Handler ---
+
+    /**
+     * Handles MaxUploadSizeExceededException (file larger than spring.servlet.multipart.max-file-size).
+     * Returns 413 Payload Too Large.
+     */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ResponseEntity<Map<String, Object>> handleMaxSize(MaxUploadSizeExceededException ex,
-                                                             HttpServletRequest request) {
-        // Don't override OpenAPI internal exceptions
-//        if (isOpenApiRequest(request)) throw ex;
+    public ResponseEntity<ApiErrorResponse> handleMaxSize(MaxUploadSizeExceededException ex, WebRequest request) {
+        HttpStatus status = HttpStatus.PAYLOAD_TOO_LARGE; // HTTP 413
+        log.warn("Client Error (413): File size limit exceeded. Max: {}", ex.getMaxUploadSize());
 
-        Map<String, Object> body = new HashMap<>();
-        body.put("success", false);
-        body.put("message", "File size exceeds the maximum limit");
-        return ResponseEntity.status(400).body(body);
+        ApiErrorResponse errorResponse = new ApiErrorResponse(
+                UUID.randomUUID().toString(), Instant.now(), status.value(), status.getReasonPhrase(),
+                "File size exceeds the maximum limit of " + (ex.getMaxUploadSize() / (1024 * 1024)) + "MB."
+        );
+        return new ResponseEntity<>(errorResponse, status);
     }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGeneric(Exception ex) {
-        // Don't override OpenAPI internal exceptions
-//        if (isOpenApiRequest(request)) return null;
+    // --- 500 Internal Server Error Handler ---
 
-        Map<String, Object> body = new HashMap<>();
-        body.put("success", false);
-        body.put("message", "Internal error");
-        return ResponseEntity.status(500).body(body);
+    /**
+     * Handles IOException (Corrupt PDF structure or internal I/O failure from the service). Returns 500.
+     */
+    @ExceptionHandler(IOException.class)
+    public ResponseEntity<ApiErrorResponse> handlePdfProcessingException(IOException ex, WebRequest request) {
+        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
+        // Log stack trace for debugging internal server errors
+        log.error("Server Error (500): PDF processing failed.", ex);
+
+        ApiErrorResponse errorResponse = new ApiErrorResponse(
+                UUID.randomUUID().toString(), Instant.now(), status.value(), status.getReasonPhrase(),
+                "An internal error occurred during PDF processing. The document may be corrupt."
+        );
+        return new ResponseEntity<>(errorResponse, status);
     }
-
-//    private boolean isOpenApiRequest(HttpServletRequest request) {
-//        if (request == null) return false;
-//        String path = request.getRequestURI();
-//        return path.startsWith("/v3/");
-//    }
 }
-

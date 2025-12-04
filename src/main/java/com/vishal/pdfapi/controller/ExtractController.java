@@ -50,31 +50,17 @@ public class ExtractController {
   @ApiResponses({
           @ApiResponse(responseCode = "200", description = "Extraction successful",
                   content = @Content(schema = @Schema(implementation = ExtractResponse.class))),
-          @ApiResponse(responseCode = "400", description = "Invalid input"),
-          @ApiResponse(responseCode = "500", description = "Internal server error")
+          @ApiResponse(responseCode = "400", description = "Invalid input or password protected"),
+          @ApiResponse(responseCode = "413", description = "Payload Too Large"),
+          @ApiResponse(responseCode = "500", description = "Internal server error (corrupt file)")
   })
   @PostMapping("/extract-text")
-  public ResponseEntity<?> extract(@RequestPart("file") MultipartFile file) throws IOException {
+  public ResponseEntity<ExtractResponse> extract(@RequestPart("file") MultipartFile file) throws IOException {
     log.info("Received extract-text request. Filename='{}', size={} bytes",
             file != null ? file.getOriginalFilename() : "null",
             file != null ? file.getSize() : 0);
 
-    // 1. Empty file check
-    if (file == null || file.isEmpty()) {
-      log.warn("Rejected request: empty or null file.");
-      return ResponseEntity.badRequest()
-              .body(new ExtractResponse(false, "No file uploaded or Empty file"));
-    }
-
-    // 2. File type check
-    if (!file.getOriginalFilename().toLowerCase().endsWith(".pdf")) {
-      log.warn("Rejected request: invalid file type '{}'", file.getOriginalFilename());
-      return ResponseEntity.badRequest()
-              .body(new ExtractResponse(false, "Only PDF files are allowed"));
-    }
-
-    log.info("File validated. Forwarding to PdfExtractService for extraction.");
-
+    // All validation (empty, type, password) is handled by the Service and GlobalExceptionHandler.
     return ResponseEntity.ok(service.extract(file));
   }
 
@@ -83,27 +69,19 @@ public class ExtractController {
           description = "Returns title, author, subject, page count, and other metadata"
   )
   @ApiResponses({
-          @ApiResponse(responseCode = "200", description = "Metadata extracted"),
-          @ApiResponse(responseCode = "400", description = "Invalid input"),
-          @ApiResponse(responseCode = "500", description = "Internal server error")
+          @ApiResponse(responseCode = "200", description = "Metadata extracted",
+                  content = @Content(schema = @Schema(implementation = PdfMetadataResponse.class))),
+          @ApiResponse(responseCode = "400", description = "Invalid input or password protected"),
+          @ApiResponse(responseCode = "413", description = "Payload Too Large"),
+          @ApiResponse(responseCode = "500", description = "Internal server error (corrupt file)")
   })
   @PostMapping("/metadata")
-  public ResponseEntity<?> metadata(@RequestPart("file") MultipartFile file) throws IOException {
+  public ResponseEntity<PdfMetadataResponse> metadata(@RequestPart("file") MultipartFile file) throws IOException {
     log.info("Received metadata request for '{}'",
             file != null ? file.getOriginalFilename() : "null");
 
-    if (file == null || file.isEmpty()) {
-      return ResponseEntity.badRequest()
-              .body(new PdfMetadataResponse(false, "No file uploaded or Empty file"));
-    }
-
-    if (!file.getOriginalFilename().toLowerCase().endsWith(".pdf")) {
-      return ResponseEntity.badRequest()
-              .body(new PdfMetadataResponse(false, "Only PDF files are allowed"));
-    }
-
+    // Service returns a Map<String, Object>, wrap it in the response record.
     Map<String, Object> data = service.extractMetadata(file);
-    return ResponseEntity.ok(new PdfMetadataResponse(true, data));
+    return ResponseEntity.ok(new PdfMetadataResponse(data));
   }
-
 }

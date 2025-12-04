@@ -6,10 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-
+import static com.vishal.pdfapi.TestFileUtil.load;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 
@@ -23,14 +20,6 @@ public class MetadataApiIntegrationTest {
         RestAssured.port = 8080;
     }
 
-    private byte[] load(String name) {
-        try {
-            return Files.readAllBytes(Paths.get("src/test/resources/pdfs/" + name));
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
     // ----------------------------
     // 1. VALID PDF → SUCCESS
     // ----------------------------
@@ -42,7 +31,6 @@ public class MetadataApiIntegrationTest {
                 .post("/api/metadata")
                 .then()
                 .statusCode(200)
-                .body("success", equalTo(true))
                 .body("metadata.pages", greaterThanOrEqualTo(1))
                 .body("metadata.encrypted", equalTo(false))
                 .body("metadata", hasKey("creator"));
@@ -59,7 +47,6 @@ public class MetadataApiIntegrationTest {
                 .post("/api/metadata")
                 .then()
                 .statusCode(400)
-                .body("success", equalTo(false))
                 .body("message", containsStringIgnoringCase("Only PDF files"));
     }
 
@@ -74,7 +61,6 @@ public class MetadataApiIntegrationTest {
                 .post("/api/metadata")
                 .then()
                 .statusCode(400)
-                .body("success", equalTo(false))
                 .body("message", containsStringIgnoringCase("No file"));
     }
 
@@ -89,7 +75,6 @@ public class MetadataApiIntegrationTest {
                 .post("/api/metadata")
                 .then()
                 .statusCode(400)
-                .body("success", equalTo(false))
                 .body("message", containsStringIgnoringCase("password-protected"));
     }
 
@@ -104,8 +89,7 @@ public class MetadataApiIntegrationTest {
                 .when()
                 .post("/api/metadata")
                 .then()
-                .statusCode(400)
-                .body("success", equalTo(false))
+                .statusCode(413)
                 .body("message", containsStringIgnoringCase("File size exceeds"));
     }
 
@@ -119,8 +103,6 @@ public class MetadataApiIntegrationTest {
                 .when()
                 .post("/api/metadata")
                 .then()
-                .statusCode(500)
-                .body("success", equalTo(false))
-                .body("message", containsStringIgnoringCase("Internal error"));
+                .statusCode(500);
     }
 }

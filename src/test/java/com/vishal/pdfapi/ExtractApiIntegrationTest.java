@@ -40,8 +40,7 @@ public class ExtractApiIntegrationTest {
                 .post("/api/extract-text")
                 .then()
                 .statusCode(200)
-                .body("success", equalTo(true))
-                .body("text", not(isEmptyOrNullString()))
+                .body("fullText", not(isEmptyOrNullString()))
                 .body("pages", not(empty()))
                 .body("pages.size()", equalTo(1));
     }
@@ -55,8 +54,7 @@ public class ExtractApiIntegrationTest {
                 .post("/api/extract-text")
                 .then()
                 .statusCode(200)
-                .body("success", equalTo(true))
-                .body("text", not(isEmptyOrNullString()))
+                .body("fullText", not(isEmptyOrNullString()))
                 .body("pages.size()", greaterThan(1));
     }
 
@@ -69,8 +67,7 @@ public class ExtractApiIntegrationTest {
                 .post("/api/extract-text")
                 .then()
                 .statusCode(400)
-                .body("success", equalTo(false))
-                .body("text", containsStringIgnoringCase("Only PDF files are allowed"));
+                .body("message", containsStringIgnoringCase("Only PDF files are allowed"));
     }
 //
     // 4. Empty file
@@ -82,8 +79,7 @@ public class ExtractApiIntegrationTest {
                 .post("/api/extract-text")
                 .then()
                 .statusCode(400)
-                .body("success", equalTo(false))
-                .body("text", containsStringIgnoringCase("No file uploaded or Empty file"));
+                .body("message", containsStringIgnoringCase("No file uploaded or file is empty"));
     }
 
 //     5. Large file (over 10MB)
@@ -96,8 +92,7 @@ public class ExtractApiIntegrationTest {
                 .when()
                 .post("/api/extract-text")
                 .then()
-                .statusCode(400)
-                .body("success", equalTo(false))
+                .statusCode(413)
                 .body("message", containsStringIgnoringCase("File size exceeds the maximum limit"));
     }
 
@@ -109,8 +104,7 @@ public class ExtractApiIntegrationTest {
                 .when()
                 .post("/api/extract-text")
                 .then()
-                .statusCode(500)
-                .body("success", equalTo(false));
+                .statusCode(500);
     }
 
     // 7. No file field
@@ -121,7 +115,19 @@ public class ExtractApiIntegrationTest {
                 .when()
                 .post("/api/extract-text")
                 .then()
-                .statusCode(anyOf(is(400), is(500)));
+                .statusCode(400);
+    }
+
+    // 7. Incorrect file field
+    @Test
+    void testIncorrectFileField() {
+        given()
+                .multiPart("file", "missing.pdf", new byte[0])
+                .contentType(ContentType.MULTIPART)
+                .when()
+                .post("/api/extract-text")
+                .then()
+                .statusCode(400);
     }
 
     @Test
@@ -143,8 +149,7 @@ public class ExtractApiIntegrationTest {
                 .when()
                 .post("/api/extract-text")
                 .then()
-                .statusCode(400)
-                .body("success", equalTo(false))
+                .statusCode(413)
                 .body("message", containsStringIgnoringCase("File size exceeds the maximum limit"));
     }
 
@@ -156,7 +161,6 @@ public class ExtractApiIntegrationTest {
                 .post("/api/extract-text")
                 .then()
                 .statusCode(400)
-                .body("success", equalTo(false))
                 .body("message", containsStringIgnoringCase("password-protected"));
     }
 }
