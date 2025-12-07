@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -54,7 +55,9 @@ public class ExtractController {
           @ApiResponse(responseCode = "413", description = "Payload Too Large"),
           @ApiResponse(responseCode = "500", description = "Internal server error (corrupt file)")
   })
-  @PostMapping("/extract-text")
+  @PostMapping(value = "/extract-text",
+          consumes = {MediaType.APPLICATION_JSON_VALUE, MediaType.ALL_VALUE},
+          produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<ExtractResponse> extract(@RequestPart("file") MultipartFile file) throws IOException {
     log.info("Received extract-text request. Filename='{}', size={} bytes",
             file != null ? file.getOriginalFilename() : "null",
