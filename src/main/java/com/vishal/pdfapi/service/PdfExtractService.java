@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,8 +34,19 @@ public class PdfExtractService {
     }
   }
 
+  /**
+   * Calculates the word count of a given text string.
+   * Splits by whitespace. Returns 0 for null or empty strings.
+   */
+  private int countWords(String text) {
+      if (text == null || text.trim().isEmpty()) {
+          return 0;
+      }
+      return text.trim().split("\\s+").length;
+  }
+
   public ExtractResponse extract(MultipartFile file) throws IOException {
-    validateFile(file); // 1. Moved validation here
+    validateFile(file); 
 
     log.info("Starting PDF text extraction. Filename='{}', size={} bytes",
             file.getOriginalFilename(), file.getSize());
@@ -51,10 +61,10 @@ public class PdfExtractService {
 
       int totalPages = doc.getNumberOfPages();
       PDFTextStripper stripper = new PDFTextStripper();
-//      stripper.seten(StandardCharsets.UTF_8.name()); // Ensure UTF-8
 
       // 1. Extract full text
       String fullText = stripper.getText(doc).trim();
+      int fullTextWordCount = countWords(fullText);
 
       // 2. Extract per-page text
       List<PageText> pages = new ArrayList<>();
@@ -62,15 +72,16 @@ public class PdfExtractService {
         stripper.setStartPage(i);
         stripper.setEndPage(i);
         String pageText = stripper.getText(doc).trim();
+        int pageWordCount = countWords(pageText);
 
-        pages.add(new PageText(i, pageText));
+        pages.add(new PageText(i, pageText, pageWordCount));
       }
 
       long elapsed = System.currentTimeMillis() - startTime;
-      log.info("PDF extraction completed in {} ms. Total pages: {}", elapsed, totalPages);
+      log.info("PDF extraction completed in {} ms. Total pages: {}. Total words: {}", elapsed, totalPages, fullTextWordCount);
 
-      // Return immutable record
-      return new ExtractResponse(fullText, pages, totalPages);
+      // Return immutable record with word count
+      return new ExtractResponse(fullText, pages, totalPages, fullTextWordCount);
 
     } catch (org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException e) {
       // Catches encrypted files even if isEncrypted() failed
@@ -78,7 +89,7 @@ public class PdfExtractService {
     } catch (IOException ex) {
       // Catches structural corruption errors (mapped to 500)
       log.error("PDF extraction failed for '{}': File corruption or structural error.", file.getOriginalFilename(), ex);
-      // 💡 FIX: Inspect the message to check for common corruption signatures
+      
       String msg = ex.getMessage().toLowerCase();
 
       if (msg.contains("end-of-file") || msg.contains("stream") || msg.contains("invalid") || msg.contains("corrupt")) {
@@ -90,7 +101,7 @@ public class PdfExtractService {
   }
 
   public Map<String, Object> extractMetadata(MultipartFile file) throws IOException {
-    validateFile(file); // 1. Moved validation here
+    validateFile(file); 
 
     log.info("Starting metadata extraction for '{}'", file.getOriginalFilename());
 

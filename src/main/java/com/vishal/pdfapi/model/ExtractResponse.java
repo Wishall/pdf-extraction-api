@@ -12,5 +12,8 @@ public record ExtractResponse(
         List<PageText> pages,
 
         @Schema(description = "Total number of pages extracted")
-        int pageCount
+        int pageCount,
+
+        @Schema(description = "Total word count of the full text")
+        int wordCount
 ) {}

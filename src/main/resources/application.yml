@@ -1,9 +1,10 @@
 spring:
   servlet:
     multipart:
-      # TODO: Increased default size for production: 25MB is a practical limit for a single Lambda invocation
-      max-file-size: 25MB
-      max-request-size: 25MB
+      # AWS Lambda has a hard limit of 6MB for synchronous invocations.
+      # Setting this to 6MB ensures we don't promise more than the infrastructure can handle.
+      max-file-size: 6MB
+      max-request-size: 6MB
 
 server:
   port: 8080
@@ -11,3 +12,6 @@ server:
 logging:
   level:
     root: INFO
+  pattern:
+    # Includes the Request ID from MDC in the logs: [requestId=...]
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - [requestId=%X{requestId}] - %msg%n"

@@ -8,5 +8,8 @@ public record PageText(
         int pageNumber,
 
         @Schema(description = "Extracted text for this page")
-        String text
+        String text,
+
+        @Schema(description = "Word count for this page")
+        int wordCount
 ) {}
