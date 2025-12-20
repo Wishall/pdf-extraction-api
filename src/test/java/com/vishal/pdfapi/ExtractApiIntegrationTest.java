@@ -2,7 +2,6 @@ package com.vishal.pdfapi;
 
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
-import io.restassured.response.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,7 +30,7 @@ public class ExtractApiIntegrationTest {
         RestAssured.port = port;
     }
 
-    // 1. Valid PDF extraction
+    // 1. Valid PDF extraction with Word Count and Language Detection
     @Test
     void testValidPdfExtraction() {
         given()
@@ -42,10 +41,14 @@ public class ExtractApiIntegrationTest {
                 .statusCode(200)
                 .body("fullText", not(isEmptyOrNullString()))
                 .body("pages", not(empty()))
-                .body("pages.size()", equalTo(1));
+                .body("pages.size()", equalTo(1))
+                // New Assertions
+                .body("wordCount", greaterThan(0))
+                .body("language", not(isEmptyOrNullString()))
+                .body("pages[0].wordCount", greaterThan(0));
     }
 
-//     2. Multi-page PDF extraction
+    // 2. Multi-page PDF extraction
     @Test
     void testMultiPagePdf() {
         given()
@@ -55,7 +58,9 @@ public class ExtractApiIntegrationTest {
                 .then()
                 .statusCode(200)
                 .body("fullText", not(isEmptyOrNullString()))
-                .body("pages.size()", greaterThan(1));
+                .body("pages.size()", greaterThan(1))
+                .body("wordCount", greaterThan(0))
+                .body("language", not(isEmptyOrNullString()));
     }
 
     // 3. Wrong file type
@@ -69,7 +74,7 @@ public class ExtractApiIntegrationTest {
                 .statusCode(400)
                 .body("message", containsStringIgnoringCase("Only PDF files are allowed"));
     }
-//
+
     // 4. Empty file
     @Test
     void testEmptyFile() {
@@ -82,10 +87,10 @@ public class ExtractApiIntegrationTest {
                 .body("message", containsStringIgnoringCase("No file uploaded or file is empty"));
     }
 
-//     5. Large file (over 10MB)
+    // 5. Large file (over limit)
     @Test
     void testLargeFileByteRejected() {
-        byte[] bigFile = TestFileUtil.generateBytes(1500); // 1.5MB > 1MB limit
+        byte[] bigFile = TestFileUtil.generateBytes(1500); // 1.5MB > 1MB limit (configured in test profile)
 
         given()
                 .multiPart("file", "too_big.pdf", bigFile)
@@ -105,7 +110,7 @@ public class ExtractApiIntegrationTest {
                 .post("/api/extract-text")
                 .then()
                 .statusCode(400)
-                .body("message", containsStringIgnoringCase("corrupt or malformed"));;
+                .body("message", containsStringIgnoringCase("corrupt or malformed"));
     }
 
     // 7. No file field
@@ -118,11 +123,10 @@ public class ExtractApiIntegrationTest {
                 .post("/api/extract-text")
                 .then()
                 .statusCode(400)
-                .body("message", containsStringIgnoringCase("Missing required file part"));;
-
+                .body("message", containsStringIgnoringCase("Missing required file part"));
     }
 
-    // 7. Incorrect file field
+    // 8. Incorrect file field
     @Test
     void testInvalidFileField() {
         given()
@@ -136,8 +140,7 @@ public class ExtractApiIntegrationTest {
 
     @Test
     void testSmallFileAccepted() {
-        byte[] smallPdf = TestFileUtil.generateBytes(500); // 500KB
-
+        // 500KB is acceptable
         given()
                 .multiPart("file", "multipage.pdf", load("multipage.pdf"))
                 .when()

@@ -65,6 +65,12 @@
       <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
       <version>2.7.0</version>
     </dependency>
+    <!-- Language Detection -->
+    <dependency>
+      <groupId>com.optimaize.languagedetector</groupId>
+      <artifactId>language-detector</artifactId>
+      <version>0.6</version>
+    </dependency>
   </dependencies>
   <build>
     <plugins>

@@ -15,5 +15,8 @@ public record ExtractResponse(
         int pageCount,
 
         @Schema(description = "Total word count of the full text")
-        int wordCount
+        int wordCount,
+
+        @Schema(description = "Detected language of the text (e.g., 'en', 'fr', 'es'). Returns 'unknown' if detection fails.")
+        String language
 ) {}

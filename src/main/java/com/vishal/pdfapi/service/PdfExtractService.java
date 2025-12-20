@@ -1,9 +1,19 @@
 package com.vishal.pdfapi.service;
 
+import com.optimaize.langdetect.LanguageDetector;
+import com.optimaize.langdetect.LanguageDetectorBuilder;
+import com.optimaize.langdetect.i18n.LdLocale;
+import com.optimaize.langdetect.ngram.NgramExtractors;
+import com.optimaize.langdetect.profiles.LanguageProfile;
+import com.optimaize.langdetect.profiles.LanguageProfileReader;
+import com.optimaize.langdetect.text.CommonTextObjectFactories;
+import com.optimaize.langdetect.text.TextObject;
+import com.optimaize.langdetect.text.TextObjectFactory;
 import com.vishal.pdfapi.exception.InvalidFileException;
 import com.vishal.pdfapi.exception.InvalidPasswordException;
 import com.vishal.pdfapi.model.ExtractResponse;
 import com.vishal.pdfapi.model.PageText;
+import jakarta.annotation.PostConstruct;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -22,27 +32,65 @@ import java.util.Map;
 public class PdfExtractService {
 
   private static final Logger log = LoggerFactory.getLogger(PdfExtractService.class);
+  
+  private LanguageDetector languageDetector;
+  private TextObjectFactory textObjectFactory;
+
+  @PostConstruct
+  public void init() {
+      try {
+          // Load all built-in language profiles (supports ~70 languages)
+          List<LanguageProfile> languageProfiles = new LanguageProfileReader().readAllBuiltIn();
+          
+          // Build the language detector
+          languageDetector = LanguageDetectorBuilder.create(NgramExtractors.standard())
+                  .withProfiles(languageProfiles)
+                  .build();
+          
+          // Create a text object factory
+          textObjectFactory = CommonTextObjectFactories.forDetectingOnLargeText();
+          
+          log.info("Language Detector initialized with {} profiles.", languageProfiles.size());
+      } catch (IOException e) {
+          log.error("Failed to initialize Language Detector", e);
+          // We don't throw here to allow the service to start, but detection will fail gracefully
+      }
+  }
 
   private void validateFile(MultipartFile file) {
     if (file == null || file.isEmpty() || file.getSize() == 0) {
       throw new InvalidFileException("No file uploaded or file is empty.");
     }
 
-    // Simplified check, assuming you will enforce the PDF MIME type in a future iteration
     if (!file.getOriginalFilename().toLowerCase().endsWith(".pdf")) {
       throw new InvalidFileException("Invalid file type. Only PDF files are allowed.");
     }
   }
 
-  /**
-   * Calculates the word count of a given text string.
-   * Splits by whitespace. Returns 0 for null or empty strings.
-   */
   private int countWords(String text) {
       if (text == null || text.trim().isEmpty()) {
           return 0;
       }
       return text.trim().split("\\s+").length;
+  }
+  
+  private String detectLanguage(String text) {
+      if (languageDetector == null || text == null || text.trim().isEmpty()) {
+          return "unknown";
+      }
+      try {
+          TextObject textObject = textObjectFactory.forText(text);
+          // The library returns com.google.common.base.Optional
+          com.google.common.base.Optional<LdLocale> lang = languageDetector.detect(textObject);
+          
+          if (lang.isPresent()) {
+              return lang.get().getLanguage();
+          }
+          return "unknown";
+      } catch (Exception e) {
+          log.warn("Language detection failed", e);
+          return "unknown";
+      }
   }
 
   public ExtractResponse extract(MultipartFile file) throws IOException {
@@ -65,8 +113,11 @@ public class PdfExtractService {
       // 1. Extract full text
       String fullText = stripper.getText(doc).trim();
       int fullTextWordCount = countWords(fullText);
+      
+      // 2. Detect Language
+      String language = detectLanguage(fullText);
 
-      // 2. Extract per-page text
+      // 3. Extract per-page text
       List<PageText> pages = new ArrayList<>();
       for (int i = 1; i <= totalPages; i++) {
         stripper.setStartPage(i);
@@ -78,22 +129,19 @@ public class PdfExtractService {
       }
 
       long elapsed = System.currentTimeMillis() - startTime;
-      log.info("PDF extraction completed in {} ms. Total pages: {}. Total words: {}", elapsed, totalPages, fullTextWordCount);
+      log.info("PDF extraction completed in {} ms. Pages: {}. Words: {}. Lang: {}", elapsed, totalPages, fullTextWordCount, language);
 
-      // Return immutable record with word count
-      return new ExtractResponse(fullText, pages, totalPages, fullTextWordCount);
+      // Return immutable record with word count and language
+      return new ExtractResponse(fullText, pages, totalPages, fullTextWordCount, language);
 
     } catch (org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException e) {
-      // Catches encrypted files even if isEncrypted() failed
       throw new InvalidPasswordException("PDF is password-protected/encrypted and not supported.");
     } catch (IOException ex) {
-      // Catches structural corruption errors (mapped to 500)
       log.error("PDF extraction failed for '{}': File corruption or structural error.", file.getOriginalFilename(), ex);
       
       String msg = ex.getMessage().toLowerCase();
 
       if (msg.contains("end-of-file") || msg.contains("stream") || msg.contains("invalid") || msg.contains("corrupt")) {
-        // Re-throw as a client error (400)
         throw new InvalidFileException("The uploaded PDF document appears to be corrupt or malformed.");
       }
       throw ex;
@@ -117,7 +165,6 @@ public class PdfExtractService {
       map.put("encrypted", doc.isEncrypted());
       map.put("version", doc.getVersion());
 
-      // ... (Metadata fields remain the same) ...
       if (doc.getDocumentInformation() != null) {
         PDDocumentInformation info = doc.getDocumentInformation();
         map.put("title", info.getTitle());

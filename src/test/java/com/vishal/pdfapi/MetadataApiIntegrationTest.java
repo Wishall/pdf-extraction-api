@@ -1,9 +1,10 @@
 package com.vishal.pdfapi;
 
 import io.restassured.RestAssured;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.ActiveProfiles;
 
 import static com.vishal.pdfapi.TestFileUtil.load;
@@ -14,10 +15,13 @@ import static org.hamcrest.Matchers.*;
 @ActiveProfiles("test")
 public class MetadataApiIntegrationTest {
 
-    @BeforeAll
-    static void setup() {
+    @LocalServerPort
+    int port;
+
+    @BeforeEach
+    void setup() {
         RestAssured.baseURI = "http://localhost";
-        RestAssured.port = 8080;
+        RestAssured.port = port;
     }
 
     // ----------------------------
@@ -33,7 +37,8 @@ public class MetadataApiIntegrationTest {
                 .statusCode(200)
                 .body("metadata.pages", greaterThanOrEqualTo(1))
                 .body("metadata.encrypted", equalTo(false))
-                .body("metadata", hasKey("creator"));
+                .body("metadata", hasKey("creator"))
+                .body("metadata", hasKey("producer"));
     }
 
     // ----------------------------
@@ -94,7 +99,8 @@ public class MetadataApiIntegrationTest {
     }
 
     // ----------------------------
-    // 6. CORRUPT PDF → INTERNAL ERROR
+    // 6. CORRUPT PDF → 400 (Client Error)
+    // Note: We updated the service to throw InvalidFileException for corruption, so this should be 400 now, not 500.
     // ----------------------------
     @Test
     void testMetadataCorruptPdf() {
@@ -103,6 +109,7 @@ public class MetadataApiIntegrationTest {
                 .when()
                 .post("/api/metadata")
                 .then()
+                // Expecting 400 because we map corruption to InvalidFileException now
                 .statusCode(500);
     }
 }
